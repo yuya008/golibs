@@ -9,21 +9,43 @@ const (
 	Before = 2
 )
 
+type Compartor func(*node, *node) int
+type EqualFunc func(*node, *node) bool
+
 type List interface {
+	// 往链表左侧添加元素
 	Lput(interface{})
+	// 往链表右侧添加元素
 	Rput(interface{})
+	// 获取指定索引位置的元素
 	Get(int) interface{}
+	// 从链表左侧弹出元素
 	Lpop() interface{}
+	// 从链表右侧弹出元素
 	Rpop() interface{}
+	// 快捷放入元素(右)
 	Put(interface{})
+	// 快捷弹出元素(左)
 	Pop() interface{}
+	// 删除一个元素
 	Remove(interface{})
+	// 获得链表总长
 	Len() int
+	// 返回相应对象的索引位置
 	Index(a interface{}) int
+	// 获得链表的一个子链表的拷贝
 	SubList(int, int) List
+	// 获得链表的一个切片
+	Slice(int, int) List
+	// 在指定位置插入一个元素
 	Insert(p, i int, a interface{})
+	// 并发排序
+	Sort()
+	// 清除链表
 	Clear()
+	// 获得链表头
 	GetFirstNode() *node
+	// 获得链表尾
 	GetTailNode() *node
 }
 
@@ -37,7 +59,8 @@ type doublelinkedlist struct {
 	n    int
 	Head *node
 	Tail *node
-	Eq   func(*node, *node) bool
+	Eq   EqualFunc
+	Comp Compartor
 }
 
 func NewList() List {
@@ -264,4 +287,43 @@ func (self *doublelinkedlist) SubList(fromIndex int, toIndex int) List {
 		}
 	}
 	return list
+}
+
+func (self *doublelinkedlist) Slice(fromIndex int, toIndex int) List {
+	if fromIndex < 0 || fromIndex >= toIndex || toIndex < 0 {
+		return nil
+	}
+	var (
+		index   int
+		n       int
+		infirst bool = true
+		list         = &doublelinkedlist{
+			Eq: self.Eq,
+		}
+	)
+	for node := self.Head; node != nil; node = node.Next {
+		if index >= fromIndex {
+			if infirst {
+				list.Head = node
+				infirst = false
+			}
+			n++
+		}
+		index++
+		if index == toIndex {
+			list.Tail = node
+			break
+		}
+	}
+	if n != 0 {
+		list.n = n
+	}
+	if toIndex >= self.n-1 {
+		list.Tail = self.Tail
+	}
+	return list
+}
+
+func (self *doublelinkedlist) Sort() {
+	// todo
 }
