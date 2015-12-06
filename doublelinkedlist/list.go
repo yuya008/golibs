@@ -1,16 +1,18 @@
 package doublelinkedlist
 
 import (
-	"log"
+	_ "log"
 )
 
 const (
-	After  = 1
-	Before = 2
+	After    = 1
+	Before   = 2
+	Forward  = 1
+	Backward = 2
 )
 
-type Compartor func(*node, *node) int
-type EqualFunc func(*node, *node) bool
+type Compartor func(*Node, *Node) int
+type EqualFunc func(*Node, *Node) bool
 
 type List interface {
 	// 往链表左侧添加元素
@@ -32,59 +34,91 @@ type List interface {
 	// 获得链表总长
 	Len() int
 	// 返回相应对象的索引位置
-	Index(a interface{}) int
+	IndexOf(a interface{}) int
 	// 获得链表的一个子链表的拷贝
 	SubList(int, int) List
 	// 获得链表的一个切片
-	Slice(int, int) List
+	// Slice(int, int) List
 	// 在指定位置插入一个元素
 	Insert(p, i int, a interface{})
-	// 并发排序
-	Sort()
 	// 清除链表
 	Clear()
 	// 获得链表头
-	GetFirstNode() *node
-	// 获得链表尾
-	GetTailNode() *node
+	Iter(int) Iterator
+	// 设置相等器
+	SetEq(eq EqualFunc)
+	// 设置比较器
+	SetComp(comp Compartor)
 }
 
-type node struct {
+type Iterator interface {
+	Next() *Node
+	HasNext() bool
+}
+
+type iter struct {
+	curNode *Node
+	mode    int
+	n       int
+}
+
+type Node struct {
 	Value interface{}
-	Prev  *node
-	Next  *node
+	prev  *Node
+	next  *Node
 }
 
 type doublelinkedlist struct {
 	n    int
-	Head *node
-	Tail *node
-	Eq   EqualFunc
-	Comp Compartor
+	head *Node
+	tail *Node
+	eq   EqualFunc
+	comp Compartor
 }
 
 func NewList() List {
 	return &doublelinkedlist{
-		Eq: eq,
+		eq: defaultEq,
 	}
 }
 
-func createNode(a interface{}) *node {
+func createNode(a interface{}) *Node {
 	if a == nil {
 		return nil
 	}
-	return &node{
+	return &Node{
 		Value: a,
 	}
 }
 
-func eq(n1 *node, n2 *node) bool {
+func (i *iter) Next() *Node {
+	if i.n <= 0 {
+		return nil
+	}
+	node := i.curNode
+	if i.mode == Forward {
+		i.curNode = i.curNode.prev
+	} else if i.mode == Backward {
+		i.curNode = i.curNode.next
+	}
+	i.n--
+	return node
+}
+
+func (i *iter) HasNext() bool {
+	if i.n <= 0 {
+		return false
+	}
+	return i.curNode != nil
+}
+
+func defaultEq(n1 *Node, n2 *Node) bool {
 	return n1.Value == n2.Value
 }
 
-func (self *doublelinkedlist) findNodeByIndex(i int) *node {
+func (self *doublelinkedlist) findNodeByIndex(i int) *Node {
 	var index int = 0
-	for node := self.Head; node != nil; node = node.Next {
+	for node := self.head; node != nil; node = node.next {
 		if i == index {
 			return node
 		}
@@ -93,17 +127,24 @@ func (self *doublelinkedlist) findNodeByIndex(i int) *node {
 	return nil
 }
 
-func (self *doublelinkedlist) GetFirstNode() *node {
-	return self.Head
+func (self *doublelinkedlist) Iter(mode int) Iterator {
+	iter := &iter{
+		mode: mode,
+		n:    self.n,
+	}
+	if mode == Forward {
+		iter.curNode = self.tail
+	} else if mode == Backward {
+		iter.curNode = self.head
+	} else {
+		panic("unknow mode")
+	}
+	return iter
 }
 
-func (self *doublelinkedlist) GetTailNode() *node {
-	return self.Tail
-}
-
-func (self *doublelinkedlist) findNodeByNode(n *node) *node {
-	for node := self.Head; node != nil; node = node.Next {
-		if self.Eq(node, n) {
+func (self *doublelinkedlist) findNodeByNode(n *Node) *Node {
+	for node := self.head; node != nil; node = node.next {
+		if self.eq(node, n) {
 			return node
 		}
 	}
@@ -116,15 +157,15 @@ func (self *doublelinkedlist) Lput(a interface{}) {
 		return
 	}
 	if self.n > 0 {
-		node.Next = self.Head
-		node.Prev = nil
-		self.Head.Prev = node
-		self.Head = node
+		node.next = self.head
+		node.prev = nil
+		self.head.prev = node
+		self.head = node
 	} else {
-		self.Head = node
-		self.Tail = node
-		node.Prev = nil
-		node.Next = nil
+		self.head = node
+		self.tail = node
+		node.prev = nil
+		node.next = nil
 	}
 	self.n++
 }
@@ -132,15 +173,15 @@ func (self *doublelinkedlist) Lput(a interface{}) {
 func (self *doublelinkedlist) Rput(a interface{}) {
 	node := createNode(a)
 	if self.n > 0 {
-		node.Prev = self.Tail
-		node.Next = nil
-		self.Tail.Next = node
-		self.Tail = node
+		node.prev = self.tail
+		node.next = nil
+		self.tail.next = node
+		self.tail = node
 	} else {
-		self.Head = node
-		self.Tail = node
-		node.Prev = nil
-		node.Next = nil
+		self.head = node
+		self.tail = node
+		node.prev = nil
+		node.next = nil
 	}
 	self.n++
 }
@@ -153,12 +194,12 @@ func (self *doublelinkedlist) Pop() interface{} {
 	return self.Lpop()
 }
 
-func (self *doublelinkedlist) Index(a interface{}) int {
+func (self *doublelinkedlist) IndexOf(a interface{}) int {
 	index := -1
 	witchnode := createNode(a)
-	for node := self.Head; node != nil; node = node.Next {
+	for node := self.head; node != nil; node = node.next {
 		index++
-		if self.Eq(node, witchnode) {
+		if self.eq(node, witchnode) {
 			return index
 		}
 	}
@@ -173,17 +214,17 @@ func (self *doublelinkedlist) Lpop() interface{} {
 	if self.n == 0 {
 		return nil
 	}
-	node := self.Head
+	node := self.head
 	self.n--
 	if self.n > 0 {
-		self.Head = node.Next
-		self.Head.Prev = nil
+		self.head = node.next
+		self.head.prev = nil
 	} else {
-		self.Head = nil
-		self.Tail = nil
+		self.head = nil
+		self.tail = nil
 	}
-	node.Next = nil
-	node.Prev = nil
+	node.next = nil
+	node.prev = nil
 	return node.Value
 }
 
@@ -191,17 +232,17 @@ func (self *doublelinkedlist) Rpop() interface{} {
 	if self.n == 0 {
 		return nil
 	}
-	node := self.Tail
+	node := self.tail
 	self.n--
 	if self.n > 0 {
-		self.Tail = node.Prev
-		self.Tail.Next = nil
+		self.tail = node.prev
+		self.tail.next = nil
 	} else {
-		self.Tail = nil
-		self.Head = nil
+		self.tail = nil
+		self.head = nil
 	}
-	node.Next = nil
-	node.Prev = nil
+	node.next = nil
+	node.prev = nil
 	return node.Value
 }
 
@@ -210,15 +251,15 @@ func (self *doublelinkedlist) Remove(a interface{}) {
 	if node == nil {
 		return
 	}
-	if node.Prev != nil {
-		node.Prev.Next = node.Next
+	if node.prev != nil {
+		node.prev.next = node.next
 	} else {
-		self.Head = node.Next
+		self.head = node.next
 	}
-	if node.Next != nil {
-		node.Next.Prev = node.Prev
+	if node.next != nil {
+		node.next.prev = node.prev
 	} else {
-		self.Tail = node.Prev
+		self.tail = node.prev
 	}
 	if node.Value != nil {
 		node.Value = nil
@@ -230,13 +271,23 @@ func (l *doublelinkedlist) Len() int {
 	return l.n
 }
 
+func (l *doublelinkedlist) SetEq(eq EqualFunc) {
+	l.eq = eq
+}
+
+func (l *doublelinkedlist) SetComp(comp Compartor) {
+	l.comp = comp
+}
+
 func (l *doublelinkedlist) Insert(p, i int, a interface{}) {
 	if p != After && p != Before {
 		return
 	}
 	node := l.findNodeByIndex(i)
 	if node == nil {
-		log.Println(i)
+		if l.Len() == 0 {
+			l.Put(a)
+		}
 		return
 	}
 	newnode := createNode(a)
@@ -244,40 +295,40 @@ func (l *doublelinkedlist) Insert(p, i int, a interface{}) {
 		return
 	}
 	if p == After {
-		newnode.Prev = node
-		newnode.Next = node.Next
-		if node.Next == nil {
-			l.Tail = newnode
+		newnode.prev = node
+		newnode.next = node.next
+		if node.next == nil {
+			l.tail = newnode
 		} else {
-			node.Next.Prev = newnode
+			node.next.prev = newnode
 		}
-		node.Next = newnode
+		node.next = newnode
 	} else if p == Before {
-		newnode.Prev = node.Prev
-		newnode.Next = node
-		if node.Prev == nil {
-			l.Head = newnode
+		newnode.prev = node.prev
+		newnode.next = node
+		if node.prev == nil {
+			l.head = newnode
 		} else {
-			node.Prev.Next = newnode
+			node.prev.next = newnode
 		}
-		node.Prev = newnode
+		node.prev = newnode
 	}
 	l.n++
 }
 
 func (l *doublelinkedlist) Clear() {
 	l.n = 0
-	l.Head = nil
-	l.Tail = nil
+	l.head = nil
+	l.tail = nil
 }
 
 func (self *doublelinkedlist) SubList(fromIndex int, toIndex int) List {
 	if fromIndex < 0 || fromIndex >= toIndex || toIndex < 0 {
-		return nil
+		return NewList()
 	}
 	list := NewList()
 	var index int
-	for node := self.Head; node != nil; node = node.Next {
+	for node := self.head; node != nil; node = node.next {
 		if index >= fromIndex {
 			list.Put(node.Value)
 		}
@@ -289,29 +340,30 @@ func (self *doublelinkedlist) SubList(fromIndex int, toIndex int) List {
 	return list
 }
 
+/*
 func (self *doublelinkedlist) Slice(fromIndex int, toIndex int) List {
 	if fromIndex < 0 || fromIndex >= toIndex || toIndex < 0 {
-		return nil
+		return NewList()
 	}
 	var (
 		index   int
 		n       int
 		infirst bool = true
 		list         = &doublelinkedlist{
-			Eq: self.Eq,
+			eq: self.eq,
 		}
 	)
-	for node := self.Head; node != nil; node = node.Next {
+	for node := self.head; node != nil; node = node.next {
 		if index >= fromIndex {
 			if infirst {
-				list.Head = node
+				list.head = node
 				infirst = false
 			}
 			n++
 		}
 		index++
 		if index == toIndex {
-			list.Tail = node
+			list.tail = node
 			break
 		}
 	}
@@ -319,11 +371,8 @@ func (self *doublelinkedlist) Slice(fromIndex int, toIndex int) List {
 		list.n = n
 	}
 	if toIndex >= self.n-1 {
-		list.Tail = self.Tail
+		list.tail = self.tail
 	}
 	return list
 }
-
-func (self *doublelinkedlist) Sort() {
-	// todo
-}
+*/
