@@ -118,7 +118,7 @@ func defaultEq(n1 *Node, n2 *Node) bool {
 
 func (self *doublelinkedlist) findNodeByIndex(i int) *Node {
 	var index int = 0
-	for node := self.head; node != nil; node = node.next {
+	for node := self.head; index < self.n; node = node.next {
 		if i == index {
 			return node
 		}
@@ -143,10 +143,12 @@ func (self *doublelinkedlist) Iter(mode int) Iterator {
 }
 
 func (self *doublelinkedlist) findNodeByNode(n *Node) *Node {
-	for node := self.head; node != nil; node = node.next {
+	var ns int = self.n
+	for node := self.head; ns > 0; node = node.next {
 		if self.eq(node, n) {
 			return node
 		}
+		ns--
 	}
 	return nil
 }
@@ -158,7 +160,7 @@ func (self *doublelinkedlist) Lput(a interface{}) {
 	}
 	if self.n > 0 {
 		node.next = self.head
-		node.prev = nil
+		node.prev = self.head.prev
 		self.head.prev = node
 		self.head = node
 	} else {
@@ -174,7 +176,7 @@ func (self *doublelinkedlist) Rput(a interface{}) {
 	node := createNode(a)
 	if self.n > 0 {
 		node.prev = self.tail
-		node.next = nil
+		node.next = self.tail.next
 		self.tail.next = node
 		self.tail = node
 	} else {
@@ -195,13 +197,13 @@ func (self *doublelinkedlist) Pop() interface{} {
 }
 
 func (self *doublelinkedlist) IndexOf(a interface{}) int {
-	index := -1
+	var index int = 0
 	witchnode := createNode(a)
-	for node := self.head; node != nil; node = node.next {
-		index++
+	for node := self.head; index < self.n; node = node.next {
 		if self.eq(node, witchnode) {
 			return index
 		}
+		index++
 	}
 	return -1
 }
@@ -218,7 +220,7 @@ func (self *doublelinkedlist) Lpop() interface{} {
 	self.n--
 	if self.n > 0 {
 		self.head = node.next
-		self.head.prev = nil
+		self.head.prev = node.prev
 	} else {
 		self.head = nil
 		self.tail = nil
@@ -236,7 +238,7 @@ func (self *doublelinkedlist) Rpop() interface{} {
 	self.n--
 	if self.n > 0 {
 		self.tail = node.prev
-		self.tail.next = nil
+		self.tail.next = node.next
 	} else {
 		self.tail = nil
 		self.head = nil
